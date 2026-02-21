@@ -1,9 +1,11 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { fetchOfertasVigentes } from '../lib/supabaseApi';
 
 const LandingPage = () => {
     const { isAuthenticated, user, logout } = useContext(AuthContext);
+    const displayName = user?.user_metadata?.full_name || user?.email || "Cliente";
 
     // 1. Estados para manejar los datos dinámicos
     const [offers, setOffers] = useState([]);
@@ -14,17 +16,16 @@ const LandingPage = () => {
     useEffect(() => {
         const fetchActivas = async () => {
             try {
-                // TODO: Reemplaza esta URL con tu endpoint real (Ej: 'http://localhost:3000/api/ofertas/activas')
-                // NOTA: Tu backend DEBE filtrar para devolver solo las que tengan estado "Oferta aprobada"
-                // y que estén dentro de la fecha de vigencia.
-                const response = await fetch('/api/ofertas/activas');
-
-                if (!response.ok) {
-                    throw new Error('Error al obtener las ofertas');
-                }
-
-                const data = await response.json();
-                setOffers(data);
+                const data = await fetchOfertasVigentes();
+                const normalizedOffers = data.map((offer) => ({
+                    id: offer.id,
+                    title: offer.titulo,
+                    rubro: offer.rubro_nombre,
+                    priceRegular: `$${Number(offer.precio_regular).toFixed(2)}`,
+                    priceOffer: `$${Number(offer.precio_oferta).toFixed(2)}`,
+                    image: offer.imagen_url || "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=1200&q=80"
+                }));
+                setOffers(normalizedOffers);
             } catch (error) {
                 console.error("Error fetching offers:", error);
                 // Si falla, puedes usar datos de prueba temporalmente mientras conectas tu API
@@ -55,7 +56,7 @@ const LandingPage = () => {
                 <div>
                     {isAuthenticated ? (
                         <div className="flex items-center gap-4">
-                            <span className="text-textMuted">Bienvenido, <strong className="text-textMain">{user.name}</strong></span>
+                            <span className="text-textMuted">Bienvenido, <strong className="text-textMain">{displayName}</strong></span>
                             <button onClick={logout} className="border border-accentRed text-accentRed px-5 py-2 rounded-sm hover:bg-accentRed hover:text-white transition duration-300">Salir</button>
                         </div>
                     ) : (

@@ -94,7 +94,9 @@ export default function MyCoupons() {
                         onClick={async () => {
                           try {
                             await navigator.clipboard.writeText(c.code)
-                          } catch (_) {}
+                          } catch (error) {
+                            console.error("No se pudo copiar el código:", error)
+                          }
                         }}
                         className="border border-gray-700 px-4 py-2 rounded-sm hover:bg-gray-800 transition text-sm"
                       >

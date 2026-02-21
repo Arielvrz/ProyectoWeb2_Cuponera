@@ -1,9 +1,11 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { fetchOfertasVigentes } from '../lib/supabaseApi';
 
 const LandingPage = () => {
     const { isAuthenticated, user, logout } = useContext(AuthContext);
+    const displayName = user?.user_metadata?.full_name || user?.email || "Cliente";
 
     const [offers, setOffers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -12,14 +14,16 @@ const LandingPage = () => {
     useEffect(() => {
         const fetchActivas = async () => {
             try {
-                const response = await fetch('/api/ofertas/activas');
-
-                if (!response.ok) {
-                    throw new Error('Error al obtener las ofertas');
-                }
-
-                const data = await response.json();
-                setOffers(data);
+                const data = await fetchOfertasVigentes();
+                const normalizedOffers = data.map((offer) => ({
+                    id: offer.id,
+                    title: offer.titulo,
+                    rubro: offer.rubro_nombre,
+                    priceRegular: `$${Number(offer.precio_regular).toFixed(2)}`,
+                    priceOffer: `$${Number(offer.precio_oferta).toFixed(2)}`,
+                    image: offer.imagen_url || "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=1200&q=80"
+                }));
+                setOffers(normalizedOffers);
             } catch (error) {
                 console.error("Error fetching offers:", error);
                 setOffers([
@@ -42,13 +46,12 @@ const LandingPage = () => {
 
     return (
         <div className="min-h-screen bg-darkBg text-textMain font-serif">
-            {/* Navbar (Se mantiene igual) */}
             <nav className="bg-darkSurface p-4 flex justify-between items-center shadow-[0_4px_20px_rgba(0,0,0,0.5)] sticky top-0 z-50">
                 <h1 className="text-2xl font-bold tracking-widest text-accentRed uppercase">La Cuponera</h1>
                 <div>
                     {isAuthenticated ? (
                         <div className="flex items-center gap-4">
-                            <span className="text-textMuted">Bienvenido, <strong className="text-textMain">{user.name}</strong></span>
+                            <span className="text-textMuted">Bienvenido, <strong className="text-textMain">{displayName}</strong></span>
                             <button onClick={logout} className="border border-accentRed text-accentRed px-5 py-2 rounded-sm hover:bg-accentRed hover:text-white transition duration-300">Salir</button>
                         </div>
                     ) : (
@@ -64,7 +67,6 @@ const LandingPage = () => {
                 </div>
             </nav>
 
-            {/* Hero Section (Se mantiene igual) */}
             <header
                 className="relative flex flex-col items-center justify-center text-center py-40 px-4 bg-cover bg-center"
                 style={{ backgroundImage: "url('https://images.unsplash.com/photo-1544148103-0773bf10d330?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80')" }}
@@ -84,7 +86,6 @@ const LandingPage = () => {
                 </div>
             </header>
 
-            {/* Sección de Catálogo de Promociones */}
             <section id="catalogo" className="py-20 px-8 max-w-7xl mx-auto">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                     <div>
@@ -93,7 +94,6 @@ const LandingPage = () => {
                     </div>
                 </div>
 
-                {/* Filtros por Rubro */}
                 <div className="flex flex-wrap gap-3 mb-10 border-b border-gray-800 pb-4">
                     {rubrosUnicos.map(rubro => (
                         <button
@@ -136,7 +136,6 @@ const LandingPage = () => {
                                         <span className="text-textMuted line-through text-sm font-medium">{offer.priceRegular}</span>
                                     </div>
 
-                                    {/* ✅ CONEXIÓN: se pasa la oferta completa al detalle */}
                                     <Link
                                         to={`/oferta/${offer.id}`}
                                         state={{ offer }}

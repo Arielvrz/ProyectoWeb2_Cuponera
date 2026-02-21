@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 
@@ -18,6 +18,17 @@ const Register = () => {
     const [serverError, setServerError] = useState("");
     const [serverSuccess, setServerSuccess] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+    useEffect(() => {
+        if (cooldownSeconds <= 0) return;
+
+        const timer = setInterval(() => {
+            setCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [cooldownSeconds]);
 
     const validate = () => {
         const tempErrors = {};
@@ -63,6 +74,10 @@ const Register = () => {
             return;
         }
 
+        if (cooldownSeconds > 0) {
+            return;
+        }
+
         setSubmitting(true);
         try {
             const result = await register(formData);
@@ -74,7 +89,11 @@ const Register = () => {
                 navigate("/");
             }
         } catch (err) {
-            setServerError(err.message || "No se pudo completar el registro.");
+            const message = err.message || "No se pudo completar el registro.";
+            setServerError(message);
+            if (message.toLowerCase().includes("demasiados intentos")) {
+                setCooldownSeconds(60);
+            }
         } finally {
             setSubmitting(false);
         }
@@ -184,10 +203,10 @@ const Register = () => {
 
                 <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || cooldownSeconds > 0}
                     className="w-full mt-6 bg-accentRed text-white p-3 rounded-sm font-bold hover:bg-red-700 transition duration-300 shadow-[0_0_15px_rgba(230,57,70,0.3)] tracking-wider uppercase text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                    {submitting ? "Creando..." : "Crear Cuenta"}
+                    {submitting ? "Creando..." : cooldownSeconds > 0 ? `Espera ${cooldownSeconds}s` : "Crear Cuenta"}
                 </button>
             </form>
         </div>

@@ -17,8 +17,18 @@ const parseResponse = async (response) => {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error("Demasiados intentos en poco tiempo. Espera 1 minuto e inténtalo de nuevo.");
+    }
+
     const errorMessage =
-      data?.msg_description || data?.error_description || data?.message || "Error en la solicitud";
+      data?.msg_description ||
+      data?.error_description ||
+      data?.message ||
+      data?.error ||
+      data?.details ||
+      data?.hint ||
+      `Error HTTP ${response.status}`;
     throw new Error(errorMessage);
   }
 

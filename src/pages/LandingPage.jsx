@@ -51,6 +51,12 @@ const LandingPage = () => {
                 <div>
                     {isAuthenticated ? (
                         <div className="flex items-center gap-4">
+                            <Link
+                                to="/mis-cupones"
+                                className="border border-gray-600 text-textMain px-5 py-2 rounded-sm hover:bg-gray-800 transition duration-300"
+                            >
+                                Mis Cupones
+                            </Link>
                             <span className="text-textMuted">Bienvenido, <strong className="text-textMain">{displayName}</strong></span>
                             <button onClick={logout} className="border border-accentRed text-accentRed px-5 py-2 rounded-sm hover:bg-accentRed hover:text-white transition duration-300">Salir</button>
                         </div>

@@ -15,7 +15,11 @@ const Login = () => {
         setSubmitting(true);
 
         try {
-            await login(credentials.correo, credentials.password);
+            const result = await login(credentials.correo, credentials.password);
+            if (result.profileIncomplete) {
+                navigate("/completar-perfil");
+                return;
+            }
             navigate("/");
         } catch (err) {
             setError(err.message || "No se pudo iniciar sesión.");

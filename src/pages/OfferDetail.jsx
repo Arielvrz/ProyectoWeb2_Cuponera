@@ -1,32 +1,8 @@
-import { useMemo, useState } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-
-function generateCouponCode(existingSet) {
-  const letters = "abcdefghijklmnopqrstuvwxyz"
-  const numbers = "0123456789"
-  let code = ""
-
-  do {
-    const chars = []
-
-    for (let i = 0; i < 3; i++) {
-      chars.push(letters[Math.floor(Math.random() * letters.length)])
-    }
-
-    for (let i = 0; i < 3; i++) {
-      chars.push(numbers[Math.floor(Math.random() * numbers.length)])
-    }
-
-    for (let i = chars.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[chars[i], chars[j]] = [chars[j], chars[i]]
-    }
-
-    code = chars.join("")
-  } while (existingSet.has(code))
-
-  return code
-}
+import { useParams } from "react-router-dom"
+import { AuthContext } from "../context/AuthContext"
+import { comprarCupon, fetchOfertaVigenteById } from "../lib/supabaseApi"
 
 function onlyDigits(v) {
   return String(v || "").replace(/\D/g, "")
@@ -62,21 +38,25 @@ function isValidExpiry(mmYY) {
 
 export default function OfferDetail() {
   const navigate = useNavigate()
+  const { id } = useParams()
   const { state } = useLocation()
+  const { isAuthenticated, session } = useContext(AuthContext)
 
-  const offer =
+  const [offer, setOffer] = useState(
     state?.offer || {
-      id: 1,
-      title: "2x1 en hamburguesas",
-      rubro: "Restaurantes",
-      priceRegular: "$12.00",
-      priceOffer: "$6.00",
-      description: "Promoción válida de lunes a jueves.",
-      image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
-      companyName: "Restaurante La Esquina",
-      companyCode: "RES123",
-      useLimitDate: "2026-04-30"
+      id: Number(id),
+      title: "Oferta",
+      rubro: "Rubro",
+      priceRegular: "$0.00",
+      priceOffer: "$0.00",
+      description: "Cargando detalle...",
+      image: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=1200&q=80",
+      companyName: "Empresa",
+      companyCode: "EMP000",
+      useLimitDate: "-"
     }
+  )
+  const [loadingOffer, setLoadingOffer] = useState(!state?.offer)
 
   const [qty, setQty] = useState(1)
   const [form, setForm] = useState({
@@ -89,6 +69,40 @@ export default function OfferDetail() {
   const [success, setSuccess] = useState("")
   const [processing, setProcessing] = useState(false)
 
+  useEffect(() => {
+    const loadOffer = async () => {
+      if (state?.offer) return
+
+      try {
+        setLoadingOffer(true)
+        const data = await fetchOfertaVigenteById(id)
+        if (!data) {
+          setError("La oferta no existe o ya no está vigente.")
+          return
+        }
+
+        setOffer({
+          id: data.id,
+          title: data.titulo,
+          rubro: data.rubro_nombre,
+          priceRegular: `$${Number(data.precio_regular).toFixed(2)}`,
+          priceOffer: `$${Number(data.precio_oferta).toFixed(2)}`,
+          description: data.descripcion,
+          image: data.imagen_url || "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=1200&q=80",
+          companyName: data.empresa_codigo,
+          companyCode: data.empresa_codigo,
+          useLimitDate: data.fecha_limite_uso
+        })
+      } catch (fetchError) {
+        setError(fetchError.message || "No se pudo cargar la oferta.")
+      } finally {
+        setLoadingOffer(false)
+      }
+    }
+
+    loadOffer()
+  }, [id, state?.offer])
+
   const canPay = useMemo(() => {
     if (!form.name.trim()) return false
     if (!isValidCardNumber(form.card)) return false
@@ -98,46 +112,31 @@ export default function OfferDetail() {
     return true
   }, [form, qty])
 
-  const handlePay = (e) => {
+  const handlePay = async (e) => {
     e.preventDefault()
     setError("")
     setSuccess("")
-    setProcessing(true)
+    if (!isAuthenticated || !session?.access_token) {
+      navigate("/login")
+      return
+    }
 
-    setTimeout(() => {
-      const existing = JSON.parse(localStorage.getItem("coupons") || "[]")
-      const existingCodes = new Set(existing.map((c) => c.code))
+    try {
+      setProcessing(true)
+      const createdCodes = []
 
-      const created = []
       for (let i = 0; i < Number(qty); i++) {
-        const code = generateCouponCode(existingCodes)
-        existingCodes.add(code)
-
-        existing.push({
-          id: crypto.randomUUID(),
-          code,
-          offerTitle: offer.title,
-          companyName: offer.companyName,
-          rubro: offer.rubro,
-          price: offer.priceOffer,
-          userEmail: "demo@cuponera.com",
-          status: "disponible",
-          createdAt: new Date().toISOString(),
-          useLimitDate: offer.useLimitDate
-        })
-
-        created.push(code)
+        const result = await comprarCupon(session.access_token, offer.id)
+        createdCodes.push(result.codigo)
       }
 
-      localStorage.setItem("coupons", JSON.stringify(existing))
-
-      setSuccess(`Compra exitosa. Se generaron ${created.length} cupón(es).`)
+      setSuccess(`Compra exitosa. Se generaron ${createdCodes.length} cupón(es).`)
+      setTimeout(() => navigate("/mis-cupones"), 900)
+    } catch (payError) {
+      setError(payError.message || "No se pudo completar la compra.")
+    } finally {
       setProcessing(false)
-
-      setTimeout(() => {
-        navigate("/mis-cupones")
-      }, 900)
-    }, 700)
+    }
   }
 
   return (
@@ -186,9 +185,7 @@ export default function OfferDetail() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h2 className="text-2xl font-bold text-white">Pago con tarjeta (simulado)</h2>
-                <p className="text-[var(--color-textMuted)] mt-1">
-                  Usa datos de prueba para avanzar rápido.
-                </p>
+                <p className="text-[var(--color-textMuted)] mt-1">Solo usuarios autenticados pueden comprar.</p>
               </div>
 
               <button
@@ -206,6 +203,12 @@ export default function OfferDetail() {
                 Autollenar datos de prueba
               </button>
             </div>
+
+            {loadingOffer ? (
+              <div className="mt-6 border border-gray-700 bg-black/30 text-white p-4 rounded-sm">
+                Cargando detalle de oferta...
+              </div>
+            ) : null}
 
             {error ? (
               <div className="mt-6 border border-[var(--color-accentRed)]/50 bg-black/30 text-white p-4 rounded-sm">
@@ -296,7 +299,7 @@ export default function OfferDetail() {
               </div>
 
               <div className="md:col-span-2 text-xs text-[var(--color-textMuted)] pt-2">
-                Esto es una simulación (sin cobro real). El cupón se guarda localmente para pruebas.
+                Esto es una simulación (sin cobro real). El cupón se guarda en Supabase ligado a tu usuario.
               </div>
             </form>
           </div>

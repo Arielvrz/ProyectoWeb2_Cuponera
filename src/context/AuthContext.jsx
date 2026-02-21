@@ -1,10 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useEffect, useState } from "react";
 import {
+    clearPendingClienteProfile,
     clearStoredSession,
     createClienteProfile,
+    fetchClienteProfile,
+    getPendingClienteProfile,
     getAuthUser,
     getStoredSession,
+    setPendingClienteProfile,
     setStoredSession,
     signIn,
     signOut,
@@ -13,10 +17,45 @@ import {
 
 export const AuthContext = createContext();
 
+const buildClientePayload = (authUser, explicitProfile = null) => {
+    const metadata = authUser?.user_metadata || {};
+    const profile = explicitProfile || {};
+
+    return {
+        id: authUser.id,
+        nombres: profile.nombres || metadata.nombres || "",
+        apellidos: profile.apellidos || metadata.apellidos || "",
+        telefono: profile.telefono || metadata.telefono || "",
+        correo: authUser.email,
+        direccion: profile.direccion || metadata.direccion || "",
+        dui: profile.dui || metadata.dui || ""
+    };
+};
+
+const ensureClienteProfile = async (accessToken, authUser, explicitProfile = null) => {
+    if (!authUser?.id) {
+        throw new Error("No se pudo identificar el usuario autenticado.");
+    }
+
+    const existingProfile = await fetchClienteProfile(accessToken, authUser.id);
+    if (existingProfile) return true;
+
+    const payload = buildClientePayload(authUser, explicitProfile);
+    const missingRequired = ["nombres", "apellidos", "telefono", "direccion", "dui"].some(
+        (field) => !payload[field]
+    );
+
+    if (missingRequired) return false;
+
+    await createClienteProfile(accessToken, payload);
+    return true;
+};
+
 export const AuthProvider = ({ children }) => {
     const [session, setSession] = useState(null);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [profileComplete, setProfileComplete] = useState(true);
 
     useEffect(() => {
         const bootstrapSession = async () => {
@@ -29,12 +68,17 @@ export const AuthProvider = ({ children }) => {
                 }
 
                 const authUser = await getAuthUser(storedSession.access_token);
+                const pendingProfile = getPendingClienteProfile(authUser.email);
+                const ok = await ensureClienteProfile(storedSession.access_token, authUser, pendingProfile);
+                clearPendingClienteProfile(authUser.email);
                 setSession(storedSession);
                 setUser(authUser);
+                setProfileComplete(ok);
             } catch {
                 clearStoredSession();
                 setSession(null);
                 setUser(null);
+                setProfileComplete(true);
             } finally {
                 setLoading(false);
             }
@@ -55,14 +99,29 @@ export const AuthProvider = ({ children }) => {
         setSession(nextSession);
 
         const authUser = loginData.user ?? (await getAuthUser(nextSession.access_token));
+        const pendingProfile = getPendingClienteProfile(authUser.email);
+        const ok = await ensureClienteProfile(nextSession.access_token, authUser, pendingProfile);
+        clearPendingClienteProfile(authUser.email);
         setUser(authUser);
-        return authUser;
+        setProfileComplete(ok);
+        return { user: authUser, profileIncomplete: !ok };
     };
 
     const register = async (formData) => {
+        const profilePayload = {
+            nombres: formData.nombres,
+            apellidos: formData.apellidos,
+            telefono: formData.telefono,
+            direccion: formData.direccion,
+            dui: formData.dui
+        };
+
+        setPendingClienteProfile(formData.correo, profilePayload);
+
         const registerData = await signUp({
             email: formData.correo,
-            password: formData.password
+            password: formData.password,
+            data: profilePayload
         });
 
         // Si el proyecto exige confirmación por correo, Supabase no devuelve sesión aún.
@@ -79,19 +138,14 @@ export const AuthProvider = ({ children }) => {
             expires_in: registerData.session.expires_in
         };
 
-        await createClienteProfile(nextSession.access_token, {
-            id: registerData.user.id,
-            nombres: formData.nombres,
-            apellidos: formData.apellidos,
-            telefono: formData.telefono,
-            correo: formData.correo,
-            direccion: formData.direccion,
-            dui: formData.dui
-        });
+        const currentAuthUser = registerData.user ?? (await getAuthUser(nextSession.access_token));
+        await ensureClienteProfile(nextSession.access_token, currentAuthUser, profilePayload);
+        clearPendingClienteProfile(formData.correo);
 
         setStoredSession(nextSession);
         setSession(nextSession);
-        setUser(registerData.user);
+        setUser(currentAuthUser);
+        setProfileComplete(true);
 
         return {
             success: true,
@@ -111,15 +165,36 @@ export const AuthProvider = ({ children }) => {
         clearStoredSession();
         setSession(null);
         setUser(null);
+        setProfileComplete(true);
+    };
+
+    const completeProfile = async (formData) => {
+        if (!session?.access_token || !user?.id) {
+            throw new Error("No hay sesión activa.");
+        }
+
+        await createClienteProfile(session.access_token, {
+            id: user.id,
+            nombres: formData.nombres,
+            apellidos: formData.apellidos,
+            telefono: formData.telefono,
+            correo: user.email,
+            direccion: formData.direccion,
+            dui: formData.dui
+        });
+
+        setProfileComplete(true);
     };
 
     const value = {
         user,
         session,
         isAuthenticated: Boolean(user),
+        profileComplete,
         loading,
         login,
         register,
+        completeProfile,
         logout
     };
 

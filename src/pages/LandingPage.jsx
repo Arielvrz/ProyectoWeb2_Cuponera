@@ -5,18 +5,13 @@ import { AuthContext } from '../context/AuthContext';
 const LandingPage = () => {
     const { isAuthenticated, user, logout } = useContext(AuthContext);
 
-    // 1. Estados para manejar los datos dinámicos
     const [offers, setOffers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRubro, setSelectedRubro] = useState('Todos');
 
-    // 2. Fetch de datos desde tu API / Backend
     useEffect(() => {
         const fetchActivas = async () => {
             try {
-                // TODO: Reemplaza esta URL con tu endpoint real (Ej: 'http://localhost:3000/api/ofertas/activas')
-                // NOTA: Tu backend DEBE filtrar para devolver solo las que tengan estado "Oferta aprobada"
-                // y que estén dentro de la fecha de vigencia.
                 const response = await fetch('/api/ofertas/activas');
 
                 if (!response.ok) {
@@ -27,10 +22,9 @@ const LandingPage = () => {
                 setOffers(data);
             } catch (error) {
                 console.error("Error fetching offers:", error);
-                // Si falla, puedes usar datos de prueba temporalmente mientras conectas tu API
                 setOffers([
-                    { id: 1, title: "Cena Exclusiva para Dos", rubro: "Restaurantes", priceRegular: "$120.00", priceOffer: "$59.99", image: "https://images.unsplash.com/photo-1544025162-d76694265947" },
-                    { id: 2, title: "Mantenimiento Premium", rubro: "Talleres", priceRegular: "$250.00", priceOffer: "$149.99", image: "https://images.unsplash.com/photo-1613214149922-f1809c99b414" }
+                    { id: 1, title: "Cena Exclusiva para Dos", rubro: "Restaurantes", priceRegular: "$120.00", priceOffer: "$59.99", image: "https://images.unsplash.com/photo-1544025162-d76694265947", description: "Cena premium para dos personas.", companyName: "Restaurante La Esquina", companyCode: "RES123", useLimitDate: "2026-04-30" },
+                    { id: 2, title: "Mantenimiento Premium", rubro: "Talleres", priceRegular: "$250.00", priceOffer: "$149.99", image: "https://images.unsplash.com/photo-1613214149922-f1809c99b414", description: "Incluye revisión general y cambio de aceite.", companyName: "MotorPro", companyCode: "TAL456", useLimitDate: "2026-05-15" }
                 ]);
             } finally {
                 setLoading(false);
@@ -40,7 +34,6 @@ const LandingPage = () => {
         fetchActivas();
     }, []);
 
-    // 3. Lógica para extraer rubros únicos y filtrar ofertas
     const rubrosUnicos = ['Todos', ...new Set(offers.map(offer => offer.rubro))];
 
     const filteredOffers = selectedRubro === 'Todos'
@@ -85,7 +78,6 @@ const LandingPage = () => {
                     <p className="text-textMain text-xl mb-10 max-w-2xl font-light drop-shadow-md">
                         Accede a descuentos exclusivos en los mejores restaurantes, spas y servicios premium de la ciudad.
                     </p>
-                    {/* Al hacer clic, puedes hacer scroll suave hacia la sección de ofertas */}
                     <a href="#catalogo" className="bg-accentRed text-white px-10 py-4 rounded-sm text-lg font-bold hover:bg-red-700 transition duration-300 shadow-[0_0_25px_rgba(230,57,70,0.6)] border border-accentRed/50">
                         Explorar Ofertas
                     </a>
@@ -118,7 +110,6 @@ const LandingPage = () => {
                     ))}
                 </div>
 
-                {/* Renderizado Condicional del Estado de Carga */}
                 {loading ? (
                     <div className="text-center py-20">
                         <p className="text-xl text-textMuted animate-pulse">Cargando las mejores ofertas...</p>
@@ -137,13 +128,20 @@ const LandingPage = () => {
                                         {offer.rubro}
                                     </div>
                                 </div>
+
                                 <div className="p-6 flex flex-col flex-grow">
                                     <h4 className="text-xl font-bold mb-2 line-clamp-2 group-hover:text-accentRed transition">{offer.title}</h4>
                                     <div className="flex items-baseline gap-3 mt-auto pt-4">
                                         <span className="text-3xl font-extrabold text-white">{offer.priceOffer}</span>
                                         <span className="text-textMuted line-through text-sm font-medium">{offer.priceRegular}</span>
                                     </div>
-                                    <Link to={`/oferta/${offer.id}`} className="w-full mt-6 border-2 border-accentRed text-accentRed py-2 rounded-sm font-bold hover:bg-accentRed hover:text-white transition duration-300 uppercase text-sm tracking-wider text-center inline-block">
+
+                                    {/* ✅ CONEXIÓN: se pasa la oferta completa al detalle */}
+                                    <Link
+                                        to={`/oferta/${offer.id}`}
+                                        state={{ offer }}
+                                        className="w-full mt-6 border-2 border-accentRed text-accentRed py-2 rounded-sm font-bold hover:bg-accentRed hover:text-white transition duration-300 uppercase text-sm tracking-wider text-center inline-block"
+                                    >
                                         Comprar Cupón
                                     </Link>
                                 </div>
@@ -152,10 +150,6 @@ const LandingPage = () => {
                     </div>
                 )}
             </section>
-
-            {/* Resto del código (Sección "Cómo Funciona" y "Footer" se mantienen igual que tu original) */}
-            {/* ... */}
-
         </div>
     );
 };

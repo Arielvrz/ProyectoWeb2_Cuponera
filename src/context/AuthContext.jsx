@@ -76,13 +76,15 @@ export const AuthProvider = ({ children }) => {
                 setRole(userRole);
                 setEmpresaId(empresa_id ?? null);
 
-                if (userRole === "cliente") {
+                const isPrivilegedRole = ["admin", "company_admin", "employee"].includes(userRole);
+
+                if (isPrivilegedRole) {
+                    setProfileComplete(true);
+                } else {
                     const pending = getPendingClienteProfile(authUser.email);
                     const ok = await ensureClienteProfile(storedSession.access_token, authUser, pending);
                     clearPendingClienteProfile(authUser.email);
                     setProfileComplete(ok);
-                } else {
-                    setProfileComplete(true);
                 }
             } catch {
                 clearStoredSession();
@@ -120,18 +122,23 @@ export const AuthProvider = ({ children }) => {
         setRole(userRole);
         setEmpresaId(empresa_id ?? null);
 
-        let profileIncomplete = false;
-        if (userRole === "cliente") {
-            const pending = getPendingClienteProfile(authUser.email);
-            const ok = await ensureClienteProfile(nextSession.access_token, authUser, pending);
-            clearPendingClienteProfile(authUser.email);
-            setProfileComplete(ok);
-            profileIncomplete = !ok;
-        } else {
+        // Admin, company_admin, and employee accounts are fully managed via the
+        // profiles table. They never go through the clientes profile-completion
+        // flow and are never redirected to /completar-perfil.
+        const isPrivilegedRole = ["admin", "company_admin", "employee"].includes(userRole);
+
+        if (isPrivilegedRole) {
             setProfileComplete(true);
+            return { user: authUser, role: userRole, profileIncomplete: false };
         }
 
-        return { user: authUser, role: userRole, profileIncomplete };
+        // Cliente path: ensure a clientes record exists; if required fields are
+        // missing the user must complete their profile before proceeding.
+        const pending = getPendingClienteProfile(authUser.email);
+        const ok = await ensureClienteProfile(nextSession.access_token, authUser, pending);
+        clearPendingClienteProfile(authUser.email);
+        setProfileComplete(ok);
+        return { user: authUser, role: userRole, profileIncomplete: !ok };
     };
 
     const register = async (formData) => {

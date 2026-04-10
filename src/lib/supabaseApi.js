@@ -209,20 +209,41 @@ export const fetchMisCupones = async (accessToken) => {
 };
 
 export const fetchUserProfile = async (accessToken, userId) => {
-  const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/profiles?select=role,empresa_id&id=eq.${userId}&limit=1`,
-    { method: "GET", headers: authHeaders(accessToken) }
-  );
-  const rows = await parseResponse(response);
-  if (rows[0]?.role) return rows[0];
+  // Step 1: profiles table is authoritative for all non-client roles.
+  // Parse JSON manually — never use parseResponse here because a missing
+  // table or RLS denial must degrade gracefully, not throw.
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?select=role,empresa_id&id=eq.${userId}&limit=1`,
+      { method: "GET", headers: authHeaders(accessToken) }
+    );
+    if (res.ok) {
+      const rows = await res.json().catch(() => []);
+      const profile = rows[0];
+      if (profile?.role) {
+        return { role: profile.role, empresa_id: profile.empresa_id ?? null };
+      }
+    }
+  } catch {
+    // profiles table unavailable; fall through to clientes check
+  }
 
-  const clientRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/clientes?select=id&id=eq.${userId}&limit=1`,
-    { method: "GET", headers: authHeaders(accessToken) }
-  );
-  const clients = await parseResponse(clientRes);
-  if (clients[0]) return { role: "cliente", empresa_id: null };
+  // Step 2: no profiles row found — check clientes as a fallback so that
+  // clients who registered before the profiles table existed still work.
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/clientes?select=id&id=eq.${userId}&limit=1`,
+      { method: "GET", headers: authHeaders(accessToken) }
+    );
+    if (res.ok) {
+      const rows = await res.json().catch(() => []);
+      if (rows[0]) return { role: "cliente", empresa_id: null };
+    }
+  } catch {
+    // clientes table unavailable; treat as new client below
+  }
 
+  // Step 3: no record in either table — brand-new signup flow.
   return { role: "cliente", empresa_id: null };
 };
 

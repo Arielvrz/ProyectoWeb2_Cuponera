@@ -1,6 +1,7 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
+import { validateDUI, validatePhone, formatDUI } from "../utils/validation";
 
 export default function CompleteProfile() {
   const { user, completeProfile } = useContext(AuthContext);
@@ -12,45 +13,95 @@ export default function CompleteProfile() {
     direccion: "",
     dui: "",
   });
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
+  const [serverError, setServerError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const handleDuiChange = (e) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 9) value = value.slice(0, 9);
-    if (value.length > 8) value = `${value.slice(0, 8)}-${value.slice(8)}`;
-    setForm({ ...form, dui: value });
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleDuiChange = (e) => setForm({ ...form, dui: formatDUI(e.target.value) });
+
+  const validate = () => {
+    const errs = {};
+    if (!form.nombres.trim()) errs.nombres = "Requerido";
+    if (!form.apellidos.trim()) errs.apellidos = "Requerido";
+    if (!validatePhone(form.telefono)) errs.telefono = "Debe iniciar con 2, 6 o 7 y tener 8 digitos";
+    if (!form.direccion.trim()) errs.direccion = "Requerido";
+    if (!validateDUI(form.dui)) errs.dui = "DUI invalido. Formato: 00000000-0";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const submit = async (e) => {
     e.preventDefault();
-    setError("");
+    setServerError("");
+    if (!validate()) return;
     setSaving(true);
     try {
       await completeProfile(form);
       navigate("/");
     } catch (err) {
-      setError(err.message || "No se pudo completar el perfil.");
+      setServerError(err.message || "No se pudo completar el perfil.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-darkBg text-textMain flex items-center justify-center p-4">
+    <div className="min-h-screen bg-darkBg text-textMain flex items-center justify-center p-4 font-serif">
       <form onSubmit={submit} className="w-full max-w-md bg-darkCard border border-gray-800 p-8 rounded-sm">
-        <h1 className="text-2xl font-bold">Completa tu perfil</h1>
-        <p className="text-textMuted text-sm mt-2">Cuenta: {user?.email}</p>
+        <h1 className="text-2xl font-bold text-white">Completa tu perfil</h1>
+        <p className="text-textMuted text-sm mt-1 mb-6">Cuenta: {user?.email}</p>
 
-        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        {serverError && <p className="mb-4 text-sm text-red-300 border border-red-700 bg-red-900/20 px-3 py-2 rounded-sm">{serverError}</p>}
 
-        <input className="w-full mt-4 p-3 bg-darkSurface border border-gray-700 rounded-sm" placeholder="Nombres" onChange={(e) => setForm({ ...form, nombres: e.target.value })} />
-        <input className="w-full mt-3 p-3 bg-darkSurface border border-gray-700 rounded-sm" placeholder="Apellidos" onChange={(e) => setForm({ ...form, apellidos: e.target.value })} />
-        <input className="w-full mt-3 p-3 bg-darkSurface border border-gray-700 rounded-sm" placeholder="Teléfono (8 dígitos)" maxLength="8" onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
-        <input className="w-full mt-3 p-3 bg-darkSurface border border-gray-700 rounded-sm" placeholder="Dirección" onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
-        <input className="w-full mt-3 p-3 bg-darkSurface border border-gray-700 rounded-sm" placeholder="DUI 00000000-0" value={form.dui} maxLength="10" onChange={handleDuiChange} />
+        {[
+          ["nombres", "Nombres", "text"],
+          ["apellidos", "Apellidos", "text"],
+          ["direccion", "Direccion", "text"],
+        ].map(([name, label, type]) => (
+          <div key={name} className="mb-4">
+            <label className="block text-sm text-textMuted mb-1">{label}</label>
+            <input
+              type={type}
+              name={name}
+              value={form[name]}
+              onChange={handleChange}
+              className="w-full p-3 bg-darkSurface border border-gray-700 rounded-sm focus:border-accentRed focus:outline-none transition"
+            />
+            {errors[name] && <p className="text-accentRed text-xs mt-1">{errors[name]}</p>}
+          </div>
+        ))}
 
-        <button disabled={saving} className="w-full mt-5 bg-accentRed text-white p-3 rounded-sm font-bold disabled:opacity-60">
+        <div className="mb-4">
+          <label className="block text-sm text-textMuted mb-1">Telefono</label>
+          <input
+            type="tel"
+            name="telefono"
+            value={form.telefono}
+            onChange={handleChange}
+            maxLength={8}
+            className="w-full p-3 bg-darkSurface border border-gray-700 rounded-sm focus:border-accentRed focus:outline-none transition"
+          />
+          {errors.telefono && <p className="text-accentRed text-xs mt-1">{errors.telefono}</p>}
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm text-textMuted mb-1">DUI</label>
+          <input
+            value={form.dui}
+            onChange={handleDuiChange}
+            placeholder="00000000-0"
+            maxLength={10}
+            className="w-full p-3 bg-darkSurface border border-gray-700 rounded-sm focus:border-accentRed focus:outline-none transition"
+          />
+          {errors.dui && <p className="text-accentRed text-xs mt-1">{errors.dui}</p>}
+        </div>
+
+        <button
+          disabled={saving}
+          className="w-full bg-accentRed text-white p-3 rounded-sm font-bold hover:bg-red-700 transition disabled:opacity-60"
+        >
           {saving ? "Guardando..." : "Guardar perfil"}
         </button>
       </form>

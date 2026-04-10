@@ -1,5 +1,5 @@
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error("Faltan variables VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY");
@@ -8,12 +8,17 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 const sessionStorageKey = "supabase_session";
 const pendingProfileStorageKey = "pending_cliente_profile";
 
-const defaultHeaders = {
+export const defaultHeaders = {
   apikey: SUPABASE_ANON_KEY,
   "Content-Type": "application/json",
 };
 
-const parseResponse = async (response) => {
+export const authHeaders = (token) => ({
+  ...defaultHeaders,
+  Authorization: `Bearer ${token}`,
+});
+
+export const parseResponse = async (response) => {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -200,5 +205,35 @@ export const fetchMisCupones = async (accessToken) => {
     }
   );
 
+  return parseResponse(response);
+};
+
+export const fetchUserProfile = async (accessToken, userId) => {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?select=role,empresa_id&id=eq.${userId}&limit=1`,
+    { method: "GET", headers: authHeaders(accessToken) }
+  );
+  const rows = await parseResponse(response);
+  if (rows[0]?.role) return rows[0];
+
+  const clientRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/clientes?select=id&id=eq.${userId}&limit=1`,
+    { method: "GET", headers: authHeaders(accessToken) }
+  );
+  const clients = await parseResponse(clientRes);
+  if (clients[0]) return { role: "cliente", empresa_id: null };
+
+  return { role: "cliente", empresa_id: null };
+};
+
+export const upsertProfile = async (accessToken, id, role, empresa_id = null) => {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(accessToken),
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({ id, role, empresa_id }),
+  });
   return parseResponse(response);
 };
